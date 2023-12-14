@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 fn main() {
-    let mut seeds = Vec::new();
+    let mut seed_codes = Vec::new();
 
     let mut seed_soil_data_map = DataMap {
         mappings: Vec::new(),
@@ -42,7 +42,6 @@ fn main() {
         match phase {
             //read in seeds
             1 => {
-                println!("{}", line);
                 //if line is newline only, move to next phase
                 if line == "" {
                     phase = 2;
@@ -62,11 +61,11 @@ fn main() {
                     }).collect::<Vec<i64>>();
                     
                     for i in (0..seed_tokens.len()).step_by(2) {
-                        let mut seed = seed_tokens[i];
-                        while seed < seed_tokens[i] + seed_tokens[i + 1] {
-                            seeds.push(seed);
-                            seed += 1;
-                        }
+                        let seed_code = SeedCode {
+                            start_number: seed_tokens[i],
+                            count: seed_tokens[i + 1],
+                        };
+                        seed_codes.push(seed_code);
                     }
                 }
             }
@@ -199,22 +198,34 @@ fn main() {
         }
     });
 
-    let mut find_seed_locations = Vec::new();
+    let mut count = 0;
+    loop {
 
-    //for each seed, map it through the data maps to get the final location
-    seeds.iter().for_each(|seed| {
-        let mut location = seed_soil_data_map.convert(*seed);
-        location = soil_fertilizer_data_map.convert(location);
-        location = fertilizer_water_data_map.convert(location);
-        location = water_light_data_map.convert(location);
-        location = light_temperature_data_map.convert(location);
-        location = temperature_humidity_data_map.convert(location);
-        location = humidity_location_data_map.convert(location);
-        find_seed_locations.push(location);
-    });
+        //check if cound exists in location map and trace backward to reach an existing seed. If seed exists, break; else increment count
+        let current_location = humidity_location_data_map.reverse(count);
+        let current_temperature = temperature_humidity_data_map.reverse(current_location);
+        let current_light = light_temperature_data_map.reverse(current_temperature);
+        let current_water = water_light_data_map.reverse(current_light);
+        let current_fertilizer = fertilizer_water_data_map.reverse(current_water);
+        let current_soil = soil_fertilizer_data_map.reverse(current_fertilizer);
+        let seed_code = seed_soil_data_map.reverse(current_soil);
+        
+        //check seed_codes for SeedCode with start_number <= seed_code and start_number + count >= seed_code
+        let mut found_seed = false;
+        for seed in seed_codes.iter() {
+            if seed.start_number <= seed_code && seed.start_number + seed.count > seed_code {
+                found_seed = true;
+                break;
+            }
+        }
+        if found_seed {
+            break;
+        } else {
+            count += 1;
+        }
+    }
 
-    let lowest_number = find_seed_locations.iter().min();
-    println!("Lowest number: {}", lowest_number.unwrap());
+    println!("Lowest number: {}", count);
 }
 
 pub struct Mapping {
@@ -225,7 +236,7 @@ pub struct Mapping {
 
 impl Mapping {
     pub fn contains(&self, value: i64) -> bool {
-        if value >= self.source_start && value <= self.source_start + self.range_length {
+        if value >= self.source_start && value < self.source_start + self.range_length {
             return true;
         }
         return false;
@@ -237,6 +248,14 @@ impl Mapping {
         }
         return value;
     }
+    
+    pub fn output_in_range(&self, value: i64) -> bool {
+        if value >= self.dest_start && value < self.dest_start + self.range_length {
+            return true;
+        }
+        return false;
+    }
+
 }
 
 pub struct DataMap {
@@ -253,4 +272,18 @@ impl DataMap {
         }
         return value;
     }
+    
+    pub fn reverse(&self, value: i64) -> i64 {
+        for mapping in self.mappings.iter() {
+            if mapping.output_in_range(value) {
+                return mapping.source_start + (value - mapping.dest_start);
+            }
+        }
+        return value;
+    }
+}
+
+pub struct SeedCode {
+    pub start_number: i64,
+    pub count: i64,
 }
