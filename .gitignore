@@ -1,0 +1,5 @@
+a.out
+node_modules/
+dist/
+main
+input.txt
